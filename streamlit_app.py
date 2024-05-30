@@ -1,40 +1,65 @@
-import altair as alt
-import numpy as np
-import pandas as pd
 import streamlit as st
+from snowflake.snowpark.context import get_active_session
+from snowflake.snowpark import functions as F
+from datetime import datetime
+import pandas as pd
 
-"""
-# Welcome to Streamlit!
+st.set_page_config(
+    page_icon="🧊",
+    layout="wide",
+)
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:.
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+session = get_active_session()
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+medals = ["🥇", "🥈", "🥉"]
+encouraging_emoji = "👍"
 
-num_points = st.slider("Number of points in spiral", 1, 10000, 1100)
-num_turns = st.slider("Number of turns in spiral", 1, 300, 31)
+def format_time(seconds):
+    return f"` {datetime.utcfromtimestamp(int(seconds)).strftime('%M:%S')} `"
 
-indices = np.linspace(0, 1, num_points)
-theta = 2 * np.pi * num_turns * indices
-radius = indices
+# Collect and process the results
+results = (
+    session.table("FF_RESULTS")
+        .select(F.col("NAME"), F.col("TIME"))
+        .sort(F.col("TIME").asc())
+).collect()
 
-x = radius * np.cos(theta)
-y = radius * np.sin(theta)
+processed_results = []
+for idx, result in enumerate(results):
+    result_dict = result.as_dict()
+    result_dict["NAME"] = result_dict["NAME"].upper()  # Convert name to uppercase
+    if idx < 3:
+        result_dict["Position"] = medals[idx]
+    else:
+        result_dict["Position"] = encouraging_emoji
+    result_dict["FORMATTED_TIME"] = format_time(result_dict["TIME"])
+    processed_results.append(result_dict)
 
-df = pd.DataFrame({
-    "x": x,
-    "y": y,
-    "idx": indices,
-    "rand": np.random.randn(num_points),
-})
+df = pd.DataFrame(processed_results)
 
-st.altair_chart(alt.Chart(df, height=700, width=700)
-    .mark_point(filled=True)
-    .encode(
-        x=alt.X("x", axis=None),
-        y=alt.Y("y", axis=None),
-        color=alt.Color("idx", legend=None, scale=alt.Scale()),
-        size=alt.Size("rand", legend=None, scale=alt.Scale(range=[1, 150])),
-    ))
+# Collect all row components
+row_components = []
+for idx, row in df.iterrows():
+    row_components.append((row['Position'], row['NAME'], row['FORMATTED_TIME']))
+
+
+
+# Render the title and headers
+st.title("Snow Summit 24 :snowflake:")
+st.title("FROSTY_FRIDAY() Leaderboard :polar_bear:")
+c = st.container()
+c.divider()
+header_cols = c.columns([0.1, 0.45, 0.45])
+header_cols[1].markdown("## **🔖 :grey[NAME]**")
+header_cols[2].markdown("## **⏳ :grey[TIME]**")
+c.divider()
+
+
+# Render all rows at once
+for position, name, formatted_time in row_components:
+    cols = st.columns([0.1, 0.45, 0.45])
+    cols[0].markdown(f"## {position}")
+    cols[1].markdown(f"### :blue[{name}]")
+    cols[2].markdown(f"### {formatted_time}")
+
+st.divider()
